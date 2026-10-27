@@ -1,244 +1,175 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 
-const questions = ref([
-  {
-	question: 'What is Vue?',
-	answer: 0,
-	options: [
-		'A framework',
-		'A library',
-		'A type of hat'
-	],
-	selected: null
-  },
-  {
-	question: 'What is Vuex used for?',
-	answer: 2,
-	options: [
-		'Eating a delicious snack',
-		'Viewing things',
-		'State management'
-	],
-	selected: null
-  },
-  {
-	question: 'What is Vue Router?',
-	answer: 1,
-	options: [
-		'An ice cream maker',
-		'A routing library for Vue',
-		'Burger sauce'
-	],
-	selected: null
+const questionBank = [
+  { id: 1, category: 'Vue.js', difficulty: 'Easy', question: 'What is Vue.js primarily used for?', options: ['Building user interfaces', 'Managing databases', 'Operating systems', 'Editing images'], answer: 0, explanation: 'Vue is a progressive JavaScript framework for building reactive user interfaces.' },
+  { id: 2, category: 'Vue.js', difficulty: 'Easy', question: 'Which directive conditionally renders an element in Vue?', options: ['v-for', 'v-if', 'v-model', 'v-bind'], answer: 1, explanation: 'v-if adds or removes a block based on whether its expression is truthy.' },
+  { id: 3, category: 'Vue.js', difficulty: 'Medium', question: 'What does computed() provide in Vue 3?', options: ['A route guard', 'A cached derived value', 'A database connection', 'A CSS animation'], answer: 1, explanation: 'Computed values are cached based on their reactive dependencies and update when those dependencies change.' },
+  { id: 4, category: 'Vue.js', difficulty: 'Medium', question: 'What is the purpose of defineProps() in a Vue SFC?', options: ['To declare component props', 'To register a URL', 'To create a store', 'To compile CSS'], answer: 0, explanation: 'defineProps declares the inputs a component can receive from its parent.' },
+  { id: 5, category: 'JavaScript', difficulty: 'Easy', question: 'Which keyword declares a block-scoped variable that can be reassigned?', options: ['const', 'static', 'let', 'define'], answer: 2, explanation: 'let declares a block-scoped variable whose value can be reassigned.' },
+  { id: 6, category: 'JavaScript', difficulty: 'Easy', question: 'What does Array.map() return?', options: ['The original array only', 'A new transformed array', 'A boolean', 'A single number'], answer: 1, explanation: 'map() creates a new array containing the results of calling a callback for each element.' },
+  { id: 7, category: 'JavaScript', difficulty: 'Medium', question: 'Which statement about null and undefined is correct?', options: ['They are identical values', 'Both can represent absence of a value', 'They are both strings', 'Neither can appear in JavaScript'], answer: 1, explanation: 'null and undefined are distinct values, but both are commonly used to represent the absence of a value.' },
+  { id: 8, category: 'JavaScript', difficulty: 'Medium', question: 'What does async/await help you work with?', options: ['Asynchronous operations', 'HTML attributes', 'CSS selectors', 'Git branches'], answer: 0, explanation: 'async/await makes Promise-based asynchronous code easier to read and structure.' },
+  { id: 9, category: 'Web Basics', difficulty: 'Easy', question: 'Which HTML element is most appropriate for the main content of a page?', options: ['<aside>', '<main>', '<footer>', '<label>'], answer: 1, explanation: 'The main element identifies the dominant content of the document.' },
+  { id: 10, category: 'Web Basics', difficulty: 'Easy', question: 'What does CSS primarily control?', options: ['Page presentation and layout', 'Server authentication', 'Database queries', 'JavaScript execution'], answer: 0, explanation: 'CSS controls the presentation, visual design, and layout of web documents.' },
+  { id: 11, category: 'Web Basics', difficulty: 'Medium', question: 'Which HTTP status code usually means a resource was not found?', options: ['200', '301', '404', '500'], answer: 2, explanation: 'HTTP 404 indicates that the requested resource could not be found.' },
+  { id: 12, category: 'Web Basics', difficulty: 'Medium', question: 'Which CSS technique helps a layout adapt to different screen sizes?', options: ['Media queries', 'SQL joins', 'Event bubbling', 'JSON parsing'], answer: 0, explanation: 'Media queries let styles respond to viewport or device characteristics.' },
+  { id: 13, category: 'Vue.js', difficulty: 'Hard', question: 'Why should a v-for list usually have a stable :key?', options: ['To encrypt the item', 'To help Vue track each item identity', 'To add a route', 'To prevent all re-renders'], answer: 1, explanation: 'A stable key helps Vue identify nodes and update lists predictably when items change.' },
+  { id: 14, category: 'JavaScript', difficulty: 'Hard', question: 'What is a closure in JavaScript?', options: ['A CSS layout mode', 'A function with access to its lexical scope', 'A finished HTTP request', 'A class constructor only'], answer: 1, explanation: 'A closure retains access to variables from the lexical environment in which a function was created.' },
+  { id: 15, category: 'Web Basics', difficulty: 'Hard', question: 'What is the main purpose of semantic HTML?', options: ['To communicate meaning and structure', 'To replace CSS', 'To speed up every API', 'To hide page content'], answer: 0, explanation: 'Semantic elements communicate the role of content, helping accessibility and document structure.' }
+]
+const categories = [
+  { name: 'All topics', icon: '✦', description: 'A little bit of everything', color: 'violet' },
+  { name: 'Vue.js', icon: '◈', description: 'Components & reactivity', color: 'green' },
+  { name: 'JavaScript', icon: 'JS', description: 'The language of the web', color: 'yellow' },
+  { name: 'Web Basics', icon: '⌘', description: 'HTML, CSS & HTTP', color: 'blue' }
+]
+const selectedCategory = ref('All topics')
+const selectedDifficulty = ref('All levels')
+const questionCount = ref(10)
+const screen = ref('home')
+const quizQuestions = ref([])
+const currentIndex = ref(0)
+const selectedAnswer = ref(null)
+const answers = ref({})
+const showFeedback = ref(false)
+const secondsLeft = ref(0)
+const startedAt = ref(0)
+const elapsedSeconds = ref(0)
+const bestScore = ref(Number(localStorage.getItem('mquiz-best-score') || 0))
+const completedCount = ref(Number(localStorage.getItem('mquiz-completed') || 0))
+const history = ref(JSON.parse(localStorage.getItem('mquiz-history') || '[]'))
+const timerEnabled = ref(true)
+let timerId = null
+const filteredBank = computed(() => questionBank.filter(q => (selectedCategory.value === 'All topics' || q.category === selectedCategory.value) && (selectedDifficulty.value === 'All levels' || q.difficulty === selectedDifficulty.value)))
+const currentQuestion = computed(() => quizQuestions.value[currentIndex.value] || null)
+const answeredCount = computed(() => Object.keys(answers.value).length)
+const correctCount = computed(() => quizQuestions.value.filter(q => answers.value[q.id] === q.answer).length)
+const progress = computed(() => quizQuestions.value.length ? ((currentIndex.value + (showFeedback.value ? 1 : 0)) / quizQuestions.value.length) * 100 : 0)
+const accuracy = computed(() => quizQuestions.value.length ? Math.round((correctCount.value / quizQuestions.value.length) * 100) : 0)
+const formattedTime = computed(() => {
+  const seconds = screen.value === 'quiz' && timerEnabled.value ? secondsLeft.value : elapsedSeconds.value
+  return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0')
+})
+const resultLabel = computed(() => accuracy.value >= 80 ? 'Outstanding work!' : accuracy.value >= 50 ? 'You’re getting there!' : 'Every expert starts somewhere.')
+function shuffle(items) {
+  const result = [...items]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
   }
-])
-
-const quizCompleted = ref(false)
-const currentQuestion = ref(0)
-const score = computed(() => {
-	let value = 0
-	questions.value.map(q => {
-		if (q.selected != null && q.answer == q.selected) {
-			value++
-		}
-	})
-	return value
-})
-
-const getCurrentQuestion = computed(() => {
-	let question = questions.value[currentQuestion.value]
-	question.index = currentQuestion.value
-	return question
-})
-
-const SetAnswer = (e) => {
-	questions.value[currentQuestion.value].selected = e.target.value
-	e.target.value = null
+  return result
 }
-
-const NextQuestion = () => {
-	if (currentQuestion.value < questions.value.length - 1) {
-		currentQuestion.value++
-		return
-	}
-	
-	quizCompleted.value = true
+function startQuiz() {
+  const pool = filteredBank.value
+  if (!pool.length) return
+  quizQuestions.value = shuffle(pool).slice(0, Math.min(questionCount.value, pool.length)).map(q => {
+    const options = shuffle(q.options.map((text, index) => ({ text, correct: index === q.answer })))
+    return { ...q, options: options.map(option => option.text), answer: options.findIndex(option => option.correct) }
+  })
+  currentIndex.value = 0
+  selectedAnswer.value = null
+  answers.value = {}
+  showFeedback.value = false
+  secondsLeft.value = quizQuestions.value.length * 30
+  elapsedSeconds.value = 0
+  startedAt.value = Date.now()
+  screen.value = 'quiz'
+  clearInterval(timerId)
+  if (timerEnabled.value) timerId = setInterval(() => {
+    if (screen.value !== 'quiz') return
+    secondsLeft.value = Math.max(0, secondsLeft.value - 1)
+    elapsedSeconds.value = Math.floor((Date.now() - startedAt.value) / 1000)
+    if (secondsLeft.value <= 0) finishQuiz()
+  }, 1000)
 }
+function chooseAnswer(index) {
+  if (showFeedback.value || !currentQuestion.value) return
+  selectedAnswer.value = index
+  answers.value[currentQuestion.value.id] = index
+  showFeedback.value = true
+}
+function nextQuestion() {
+  if (!showFeedback.value) return
+  if (currentIndex.value < quizQuestions.value.length - 1) {
+    currentIndex.value++
+    selectedAnswer.value = null
+    showFeedback.value = false
+  } else finishQuiz()
+}
+function previousQuestion() {
+  if (currentIndex.value <= 0) return
+  currentIndex.value--
+  selectedAnswer.value = answers.value[currentQuestion.value.id] ?? null
+  showFeedback.value = selectedAnswer.value !== null
+}
+function finishQuiz() {
+  if (screen.value !== 'quiz') return
+  clearInterval(timerId)
+  elapsedSeconds.value = Math.floor((Date.now() - startedAt.value) / 1000)
+  screen.value = 'results'
+  completedCount.value++
+  localStorage.setItem('mquiz-completed', String(completedCount.value))
+  if (correctCount.value > bestScore.value) {
+    bestScore.value = correctCount.value
+    localStorage.setItem('mquiz-best-score', String(bestScore.value))
+  }
+  const entry = { date: new Date().toISOString(), score: correctCount.value, total: quizQuestions.value.length, accuracy: accuracy.value, category: selectedCategory.value }
+  history.value = [entry, ...history.value].slice(0, 8)
+  localStorage.setItem('mquiz-history', JSON.stringify(history.value))
+}
+function restartQuiz() {
+  clearInterval(timerId)
+  screen.value = 'home'
+  selectedAnswer.value = null
+  showFeedback.value = false
+}
+function clearHistory() {
+  history.value = []
+  completedCount.value = 0
+  bestScore.value = 0
+  localStorage.removeItem('mquiz-history')
+  localStorage.removeItem('mquiz-completed')
+  localStorage.removeItem('mquiz-best-score')
+}
+onBeforeUnmount(() => clearInterval(timerId))
 </script>
 
 <template>
-	<main class="app">
-		<h1>MQuiz</h1>
-		
-		<section class="quiz" v-if="!quizCompleted">
-			<div class="quiz-info">
-				<span class="question">{{ getCurrentQuestion.question }}</span>
-				<span class="score">Score {{ score }}/{{ questions.length }}</span>
-			</div>
-			
-			<div class="options">
-				<label 
-					v-for="(option, index) in getCurrentQuestion.options" 
-					:for="'option' + index" 
-					:class="`option ${
-						getCurrentQuestion.selected == index 
-							? index == getCurrentQuestion.answer 
-								? 'correct' 
-								: 'wrong'
-							: ''
-					} ${
-						getCurrentQuestion.selected != null &&
-						index != getCurrentQuestion.selected
-							? 'disabled'
-							: ''
-					}`">
-					<input 
-						type="radio" 
-						:id="'option' + index" 
-						:name="getCurrentQuestion.index" 
-						:value="index" 
-						v-model="getCurrentQuestion.selected" 
-						:disabled="getCurrentQuestion.selected"
-						@change="SetAnswer" 
-					/>
-					<span>{{ option }}</span>
-				</label>
-			</div>
-			
-			<button 
-				@click="NextQuestion" 
-				:disabled="!getCurrentQuestion.selected">
-				{{ 
-					getCurrentQuestion.index == questions.length - 1 
-						? 'Finish' 
-						: getCurrentQuestion.selected == null
-							? 'Select an option'
-							: 'Next question'
-				}}
-			</button>
-		</section>
-
-		<section v-else>
-			<h2>You have finished the quiz!</h2>
-			<p>Your score is {{ score }}/{{ questions.length }}</p>
-		</section>
-	</main>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" @click.prevent="restartQuiz" aria-label="MQuiz home"><span class="brand-mark"><span></span><span></span><span></span><span></span></span><span class="brand-name">MQuiz<span class="brand-dot">.</span></span></a>
+      <nav class="top-nav" aria-label="Main navigation"><button class="nav-link" :class="{ active: screen === 'home' }" @click="restartQuiz">Explore</button><button class="nav-link" @click="screen = 'history'">My progress</button></nav>
+      <div class="topbar-right"><span class="status-dot"></span><span>Made for curious minds</span></div>
+    </header>
+    <main class="page-content">
+      <section v-if="screen === 'home'" class="home-view">
+        <div class="hero">
+          <div class="hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> LEARN SOMETHING NEW TODAY</div><h1>Make curiosity<br>your <span class="gradient-text">superpower.</span></h1><p class="hero-description">Small quizzes. Big brain energy. Explore topics, challenge yourself, and watch your knowledge grow one question at a time.</p><div class="hero-actions"><button class="primary-button" @click="startQuiz">Start a quiz <span aria-hidden="true">↗</span></button><div class="hero-proof"><div class="proof-avatars"><span>V</span><span>JS</span><span>⌘</span></div><span><strong>{{ questionBank.length }} questions</strong><br>ready to explore</span></div></div></div>
+          <div class="hero-art" aria-label="Quiz progress illustration"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-spark spark-one">✦</div><div class="art-spark spark-two">✧</div><div class="art-card card-back"><span class="mini-label">YOUR NEXT LEVEL</span><div class="back-lines"><i></i><i></i><i></i></div><div class="back-chip">KEEP GOING ↗</div></div><div class="art-card card-front"><div class="card-top"><span class="card-icon">✳</span><span class="live-pill"><i></i> IN PROGRESS</span></div><div class="art-question">How well do<br>you really know<br><em>the web?</em></div><div class="art-progress"><span></span></div><div class="art-card-bottom"><span>YOUR POTENTIAL</span><strong>∞</strong></div></div><div class="floating-badge"><span class="badge-star">✦</span><span><strong>Keep learning</strong><small>One question at a time</small></span></div></div>
+        </div>
+        <div class="section-heading"><div><div class="eyebrow">PICK YOUR PATH</div><h2>What are we learning?</h2><p>Choose a topic and jump right in.</p></div><span class="section-count">{{ filteredBank.length }} questions available</span></div>
+        <div class="category-grid"><button v-for="category in categories" :key="category.name" class="category-card" :class="['tone-' + category.color, { chosen: selectedCategory === category.name }]" @click="selectedCategory = category.name"><span class="category-icon">{{ category.icon }}</span><span class="category-arrow">↗</span><strong>{{ category.name }}</strong><small>{{ category.description }}</small><span class="category-footer"><span>{{ category.name === 'All topics' ? questionBank.length : questionBank.filter(q => q.category === category.name).length }} questions</span><span class="mini-arrow">→</span></span></button></div>
+        <section class="setup-panel"><div class="setup-intro"><span class="setup-icon">✳</span><div><h3>Make it your challenge</h3><p>Set the pace. You’ve got this.</p></div></div><div class="setup-controls"><label class="select-field"><span>DIFFICULTY</span><select v-model="selectedDifficulty"><option>All levels</option><option>Easy</option><option>Medium</option><option>Hard</option></select></label><label class="select-field"><span>QUESTIONS</span><select v-model.number="questionCount"><option :value="5">5 questions</option><option :value="10">10 questions</option><option :value="15">15 questions</option></select></label><label class="toggle-field"><span class="toggle-copy"><strong>Timed challenge</strong><small>30 seconds per question</small></span><button class="toggle" :class="{ enabled: timerEnabled }" role="switch" :aria-checked="timerEnabled" @click="timerEnabled = !timerEnabled"><span></span></button></label><button class="primary-button setup-start" @click="startQuiz" :disabled="!filteredBank.length">Let's go <span>↗</span></button></div><p v-if="!filteredBank.length" class="empty-note">No questions match those filters. Try another difficulty.</p></section>
+        <div class="stats-row"><div class="stat-item"><span class="stat-icon violet-bg">✦</span><span><strong>{{ completedCount }}</strong><small>Quizzes completed</small></span></div><div class="stat-item"><span class="stat-icon green-bg">↗</span><span><strong>{{ bestScore }}</strong><small>Personal best (correct)</small></span></div><div class="stat-item"><span class="stat-icon orange-bg">◷</span><span><strong>{{ history.length ? history[0].accuracy + '%' : '—' }}</strong><small>Last quiz accuracy</small></span></div></div>
+      </section>
+      <section v-else-if="screen === 'quiz'" class="quiz-view">
+        <div class="quiz-header"><button class="back-button" @click="restartQuiz">← <span>Exit quiz</span></button><div class="quiz-brand"><span class="brand-mark small-mark"><span></span><span></span><span></span><span></span></span> MQuiz</div><div class="timer-chip" :class="{ urgent: timerEnabled && secondsLeft <= 30 }">◷ <strong>{{ timerEnabled ? formattedTime : '∞' }}</strong></div></div>
+        <div class="quiz-layout"><aside class="quiz-sidebar"><div class="sidebar-label">YOUR CHALLENGE</div><h2>{{ selectedCategory === 'All topics' ? 'Mixed topics' : selectedCategory }}</h2><p>Stay curious. Every answer is a step forward.</p><div class="sidebar-stat"><span>QUESTIONS</span><strong>{{ quizQuestions.length }}</strong></div><div class="sidebar-stat"><span>ANSWERED</span><strong>{{ answeredCount }} / {{ quizQuestions.length }}</strong></div><div class="sidebar-progress"><span :style="{ width: (answeredCount / quizQuestions.length * 100) + '%' }"></span></div><div class="question-map"><button v-for="(q, i) in quizQuestions" :key="q.id" :class="{ current: currentIndex === i, done: answers[q.id] !== undefined }" @click="currentIndex = i; selectedAnswer = answers[q.id] ?? null; showFeedback = selectedAnswer !== null" :aria-label="'Go to question ' + (i + 1)">{{ String(i + 1).padStart(2, '0') }}</button></div><div class="sidebar-tip"><span>✦</span><p><strong>A little reminder</strong><br>Take your time. Read every option before you choose.</p></div></aside>
+          <div class="question-area" v-if="currentQuestion"><div class="question-meta"><span class="question-number">QUESTION {{ String(currentIndex + 1).padStart(2, '0') }} <i>/ {{ String(quizQuestions.length).padStart(2, '0') }}</i></span><span class="difficulty-pill" :class="'difficulty-' + currentQuestion.difficulty.toLowerCase()">{{ currentQuestion.difficulty }}</span></div><div class="main-progress"><span :style="{ width: progress + '%' }"></span></div><div class="question-content"><div class="question-kicker">{{ currentQuestion.category }} <span>·</span> Knowledge check</div><h1>{{ currentQuestion.question }}</h1><p class="answer-hint">Choose the best answer to continue.</p><div class="answer-list"><button v-for="(option, index) in currentQuestion.options" :key="option" class="answer-option" :class="{ selected: selectedAnswer === index && !showFeedback, correct: showFeedback && index === currentQuestion.answer, incorrect: showFeedback && selectedAnswer === index && index !== currentQuestion.answer }" :disabled="showFeedback" @click="chooseAnswer(index)"><span class="option-letter">{{ ['A','B','C','D'][index] }}</span><span class="option-text">{{ option }}</span><span class="option-state">{{ showFeedback && index === currentQuestion.answer ? '✓' : showFeedback && selectedAnswer === index ? '×' : '↗' }}</span></button></div><div v-if="showFeedback" class="explanation" :class="{ right: selectedAnswer === currentQuestion.answer }"><span class="explanation-icon">{{ selectedAnswer === currentQuestion.answer ? '✓' : 'i' }}</span><div><strong>{{ selectedAnswer === currentQuestion.answer ? 'That’s correct!' : 'Not quite — keep going!' }}</strong><p>{{ currentQuestion.explanation }}</p></div></div></div><div class="question-footer"><button class="text-button" @click="previousQuestion" :disabled="currentIndex === 0">← Previous</button><span class="footer-progress">{{ Math.round((currentIndex + 1) / quizQuestions.length * 100) }}% complete</span><button class="primary-button next-button" @click="nextQuestion" :disabled="!showFeedback">{{ currentIndex === quizQuestions.length - 1 ? 'See results' : 'Next question' }} <span>→</span></button></div></div>
+        </div>
+      </section>
+      <section v-else-if="screen === 'results'" class="results-view"><div class="results-top"><button class="back-button" @click="restartQuiz">← <span>Back to explore</span></button><span class="eyebrow">CHALLENGE COMPLETE</span></div><div class="result-card"><div class="result-illustration"><div class="result-ring"><span>✦</span></div><span class="confetti confetti-a">✧</span><span class="confetti confetti-b">✦</span><span class="confetti confetti-c">·</span></div><div class="result-copy"><div class="eyebrow">LOOK AT YOU GO</div><h1>{{ resultLabel }}</h1><p>You showed up, gave it a go, and learned something new. That’s a win.</p><div class="result-score"><strong>{{ correctCount }}<span>/ {{ quizQuestions.length }}</span></strong><div><b>correct answers</b><small>{{ accuracy }}% accuracy</small></div></div><div class="result-progress"><span :style="{ width: accuracy + '%' }"></span></div><div class="result-metrics"><div><span>TIME TAKEN</span><strong>{{ formattedTime }}</strong></div><div><span>QUESTIONS ANSWERED</span><strong>{{ answeredCount }} / {{ quizQuestions.length }}</strong></div><div><span>TOPIC</span><strong>{{ selectedCategory }}</strong></div></div><div class="result-actions"><button class="primary-button" @click="startQuiz">Try another round <span>↗</span></button><button class="secondary-button" @click="screen = 'review'">Review answers <span>→</span></button></div></div></div></section>
+      <section v-else-if="screen === 'review'" class="history-view"><div class="history-heading"><button class="back-button" @click="screen = 'results'">← <span>Back to results</span></button><div class="eyebrow">LEARN FROM EVERY ANSWER</div><h1>Answer review<span class="gradient-text">.</span></h1><p>See what you got right and learn from the ones you missed.</p></div><div class="review-list"><article v-for="(q, i) in quizQuestions" :key="q.id" class="review-card"><div class="review-index" :class="answers[q.id] === q.answer ? 'review-correct' : 'review-wrong'">{{ String(i + 1).padStart(2, '0') }}</div><div class="review-content"><span class="review-topic">{{ q.category }}</span><h3>{{ q.question }}</h3><p :class="{ 'answer-good': answers[q.id] === q.answer, 'answer-bad': answers[q.id] !== q.answer }">Your answer: {{ answers[q.id] === undefined ? 'Not answered' : q.options[answers[q.id]] }}</p><p class="correct-answer">Correct answer: {{ q.options[q.answer] }}</p><p class="review-explanation">{{ q.explanation }}</p></div></article></div><button class="primary-button review-home" @click="restartQuiz">Back to explore <span>↗</span></button></section>
+      <section v-else class="history-view"><div class="history-heading"><div class="eyebrow">YOUR PERSONAL JOURNEY</div><h1>Look how far<br>you’ve <span class="gradient-text">come.</span></h1><p>Every attempt counts. Keep building your knowledge, one quiz at a time.</p></div><div class="history-summary"><div><span>QUIZZES COMPLETED</span><strong>{{ completedCount }}</strong></div><div><span>PERSONAL BEST</span><strong>{{ bestScore }}</strong></div><div><span>RECENT ATTEMPTS</span><strong>{{ history.length }}</strong></div></div><div class="history-list-heading"><h2>Recent activity</h2><button v-if="history.length" class="text-button" @click="clearHistory">Clear history</button></div><div v-if="history.length" class="history-list"><article v-for="(item, i) in history" :key="item.date + i" class="history-item"><span class="history-item-icon">✦</span><div class="history-item-main"><strong>{{ item.category }} quiz</strong><small>{{ new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}</small></div><div class="history-item-score"><strong>{{ item.score }}/{{ item.total }}</strong><small>{{ item.accuracy }}% accuracy</small></div><div class="history-bar"><span :style="{ width: item.accuracy + '%' }"></span></div></article></div><div v-else class="empty-history"><span>✧</span><h3>Your story starts here.</h3><p>Finish your first quiz and your progress will show up here.</p><button class="primary-button" @click="restartQuiz">Explore quizzes <span>↗</span></button></div><button class="secondary-button history-back" @click="restartQuiz">← Back to explore</button></section>
+    </main>
+    <footer class="site-footer"><a class="footer-brand" href="#" @click.prevent="restartQuiz">MQuiz<span>.</span></a><span>Made with curiosity and a little bit of code.</span><span class="footer-right">KEEP GROWING ✳</span></footer>
+  </div>
 </template>
 
 <style>
-* {
-	margin: 0;
-	padding: 0;
-	box-sizing: border-box;
-	font-family: 'Montserrat', sans-serif;
-}
-
-body {
-	background-color: #112B3C;
-	color: #FFF;
-}
-
-.app {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	padding: 2rem;
-	height: 100vh;
-}
-
-h1 {
-	font-size: 2rem;
-	margin-bottom: 2rem;
-}
-
-.quiz {
-	background-color: #205375;
-	padding: 1rem;
-	width: 100%;
-	max-width: 640px;
-}
-
-.quiz-info {
-	display: flex;
-	justify-content: space-between;
-	margin-bottom: 1rem;
-}
-
-.quiz-info .question {
-	color: #FFF;
-	font-size: 1.25rem;
-}
-
-.quiz-info.score {
-	color: #FFF;
-	font-size: 1.25rem;
-}
-
-.options {
-	margin-bottom: 1rem;
-}
-
-.option {
-	padding: 1rem;
-	display: block;
-	background-color: #112B3C;
-	margin-bottom: 0.5rem;
-	border-radius: 0.5rem;
-	cursor: pointer;
-}
-
-.option:hover {
-	background-color: #112B31;
-}
-
-.option.correct {
-	background-color: #4E944F;
-}
-
-.option.wrong {
-	background-color: #B22727;
-}
-
-.option:last-of-type {
-	margin-bottom: 0;
-}
-
-.option.disabled {
-	opacity: 0.5;
-}
-
-.option input {
-	display: none;
-}
-
-button {
-	appearance: none;
-	outline: none;
-	border: none;
-	cursor: pointer;
-	padding: 0.5rem 1rem;
-	background-color: #4E944F;
-	color: #2d213f;
-	font-weight: 700;
-	text-transform: uppercase;
-	font-size: 1.2rem;
-	border-radius: 0.5rem;
-}
-
-button:disabled {
-	opacity: 0.5;
-}
-
-h2 {
-	font-size: 2rem;
-	margin-bottom: 2rem;
-	text-align: center;
-}
-
-p {
-	color: #FFF;
-	font-size: 1.5rem;
-	text-align: center;
-}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+:root{font-family:'DM Sans',sans-serif;color:#24213b;background:#faf9ff;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-optical-sizing:auto;font-weight:400;--ink:#24213b;--muted:#85839a;--purple:#7557e8;--purple-dark:#6242d6;--line:#eceaf4;--green:#20865a}
+*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh}button,select{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,select:focus-visible{outline:3px solid #b5a5ff;outline-offset:3px}button:disabled{cursor:not-allowed;opacity:.45}.app-shell{min-height:100vh;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(ellipse at 75% 8%,rgba(233,226,255,.38),transparent 30%),#faf9ff}.topbar{height:82px;padding:0 max(5.5vw,24px);display:flex;align-items:center;border-bottom:1px solid rgba(230,227,242,.8);gap:52px;background:rgba(255,255,255,.62)}.brand{display:inline-flex;align-items:center;gap:11px;text-decoration:none;color:var(--ink)}.brand-mark{width:32px;height:32px;border-radius:11px;background:#7659e9;display:grid;grid-template-columns:repeat(2,6px);grid-template-rows:repeat(2,6px);align-content:center;justify-content:center;gap:3px;transform:rotate(-5deg);box-shadow:0 5px 13px #7557e82c}.brand-mark span{background:#fff;border-radius:2px}.brand-mark span:nth-child(2){opacity:.65}.brand-mark span:nth-child(3){opacity:.8}.brand-name{font-family:Manrope,sans-serif;font-size:22px;font-weight:800;letter-spacing:-1.1px}.brand-dot,.footer-brand span{color:var(--purple)}.top-nav{display:flex;gap:28px;height:100%;align-items:center}.nav-link{height:100%;position:relative;border:0;background:none;color:#87849c;font-size:13px;font-weight:600;padding:0 3px}.nav-link.active,.nav-link:hover{color:var(--ink)}.nav-link.active:after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;border-radius:3px;background:var(--purple)}.topbar-right{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:12px;color:#817e95}.status-dot,.live-pill i{width:7px;height:7px;border-radius:50%;background:#56c894;box-shadow:0 0 0 4px #56c8941c}.page-content{width:min(1120px,calc(100% - 48px));margin:0 auto;flex:1}.hero{display:grid;grid-template-columns:1.03fr .97fr;align-items:center;min-height:460px;padding:45px 0 54px;gap:32px}.hero-copy{padding:5px 0 12px}.eyebrow{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:1.65px;font-weight:800;color:#8b78d7}.eyebrow-line{width:22px;height:2px;background:#a998f3}.hero h1,.history-heading h1{font-family:Manrope,sans-serif;font-size:clamp(42px,5vw,62px);line-height:1.13;letter-spacing:-3.2px;font-weight:800;margin:23px 0 18px;color:#27233e}.gradient-text{background:linear-gradient(105deg,#7657e8 5%,#a37cf3 55%,#e28bc6 110%);-webkit-background-clip:text;background-clip:text;color:transparent}.hero-description{font-size:14px;line-height:1.9;color:#828097;max-width:440px;margin:0}.hero-actions{display:flex;align-items:center;gap:23px;margin-top:28px}.primary-button{border:0;border-radius:12px;padding:14px 20px;display:inline-flex;align-items:center;justify-content:center;gap:25px;background:var(--purple);color:white;font-size:13px;font-weight:700;box-shadow:0 7px 16px #7557e82b;transition:transform .2s,background .2s,box-shadow .2s}.primary-button:hover:not(:disabled){background:var(--purple-dark);transform:translateY(-2px);box-shadow:0 10px 22px #7557e83b}.primary-button span{font-size:17px;line-height:1}.hero-proof{display:flex;align-items:center;gap:11px;font-size:10px;line-height:1.7;color:#9995aa}.hero-proof strong{font-size:11px;color:#4a4663}.proof-avatars{display:flex;padding-left:4px}.proof-avatars span{width:26px;height:26px;border:2px solid #faf9ff;margin-left:-4px;border-radius:50%;display:grid;place-items:center;background:#e8e1ff;color:#7557e8;font-size:9px;font-weight:800}.proof-avatars span:nth-child(2){background:#d9f4e7;color:#27825d}.proof-avatars span:nth-child(3){background:#ffe7d9;color:#b86a3b}.hero-art{height:370px;position:relative;display:flex;align-items:center;justify-content:center;isolation:isolate}.hero-art:before{content:'';position:absolute;width:310px;height:310px;background:linear-gradient(145deg,#e8e1ff,#f4eafa 75%);border-radius:50%;z-index:-2;opacity:.8}.art-orbit{position:absolute;border:1px solid #d8cff6;border-radius:50%;transform:rotate(-22deg)}.orbit-one{width:410px;height:170px}.orbit-two{width:380px;height:280px;transform:rotate(48deg);border-color:#e5dff5}.art-card{position:absolute;width:255px;height:276px;border-radius:19px;padding:22px;box-shadow:0 20px 55px #5d4d8b20}.card-back{background:#d8cdfd;transform:translate(44px,-14px) rotate(9deg);z-index:-1;color:#7d66c6}.card-front{background:#fff;transform:translate(-12px,0) rotate(-5deg);border:1px solid #f3f0fc}.card-top{display:flex;justify-content:space-between;align-items:center}.card-icon{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#eee8ff;color:#7657e9;font-size:19px}.live-pill{display:flex;align-items:center;gap:6px;border-radius:20px;background:#f0fbf5;color:#3e9972;padding:6px 8px;font-size:7px;font-weight:800;letter-spacing:.5px}.live-pill i{width:5px;height:5px;box-shadow:none}.art-question{font-family:Manrope,sans-serif;font-size:26px;line-height:1.35;font-weight:800;letter-spacing:-1px;margin-top:25px}.art-question em{font-style:normal;color:#8869ed}.art-progress{height:5px;background:#f0edf8;border-radius:5px;margin-top:25px;overflow:hidden}.art-progress span{display:block;width:72%;height:100%;border-radius:5px;background:linear-gradient(90deg,#7657e8,#c59af6)}.art-card-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:16px;color:#aaa5bd;font-size:8px;letter-spacing:1px;font-weight:700}.art-card-bottom strong{font-size:21px;color:#8869ed}.mini-label{font-size:8px;letter-spacing:1.2px;font-weight:800}.back-lines{margin-top:26px;display:grid;gap:13px}.back-lines i{height:7px;border-radius:8px;background:#c4b5f1;width:90%}.back-lines i:nth-child(2){width:70%}.back-lines i:nth-child(3){width:82%}.back-chip{margin-top:38px;display:inline-block;background:#c2b0f8;border-radius:7px;padding:9px 12px;font-size:8px;font-weight:800;letter-spacing:.7px}.art-spark{position:absolute;color:#9d80f0}.spark-one{font-size:27px;right:9%;top:21%}.spark-two{font-size:23px;left:8%;bottom:20%}.floating-badge{position:absolute;bottom:26px;right:1%;padding:12px 15px;background:#fff;border:1px solid #efecf7;border-radius:13px;display:flex;align-items:center;gap:11px;box-shadow:0 12px 30px #4b3a8212}.badge-star{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:#fff2d9;color:#e7a63e;font-size:17px}.floating-badge strong,.floating-badge small{display:block}.floating-badge strong{font-size:10px;color:#46415f}.floating-badge small{font-size:9px;color:#9994ac;margin-top:4px}.section-heading{display:flex;align-items:end;justify-content:space-between;margin:7px 0 19px}.section-heading .eyebrow{margin-bottom:8px}.section-heading h2{font-family:Manrope,sans-serif;font-size:24px;letter-spacing:-.8px;margin:0;color:var(--ink)}.section-heading p{margin:7px 0 0;font-size:12px;color:#9290a4}.section-count{font-size:10px;color:#9a96ad;padding-bottom:4px}.category-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.category-card{position:relative;text-align:left;display:flex;flex-direction:column;align-items:flex-start;min-height:157px;border:1px solid #ebe8f5;border-radius:15px;padding:17px 17px 13px;background:#fff;transition:transform .2s,border-color .2s,box-shadow .2s;color:var(--ink)}.category-card:hover{transform:translateY(-3px);box-shadow:0 12px 26px #43346d0b}.category-card.chosen{border-color:#aa96f6;box-shadow:0 0 0 2px #7557e814,0 10px 25px #43346d0a}.category-icon{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-weight:800;font-size:17px;margin-bottom:13px}.category-arrow{position:absolute;right:16px;top:17px;color:#b3afc3;font-size:15px}.category-card strong{font-size:13px}.category-card small{font-size:10px;color:#9390a4;margin-top:5px}.category-footer{width:100%;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f0edf7;padding-top:10px;margin-top:auto;font-size:9px;color:#9995aa}.mini-arrow{font-size:14px;color:#a59bbf}.tone-violet .category-icon{background:#eee8ff;color:#7758e9}.tone-green .category-icon{background:#e2f7ed;color:#25865c}.tone-yellow .category-icon{background:#fff3d5;color:#c18b28}.tone-blue .category-icon{background:#e4f0ff;color:#4c87d5}.setup-panel{margin-top:22px;padding:22px 24px;background:#fff;border:1px solid #ebe8f5;border-radius:16px}.setup-intro{display:flex;align-items:center;gap:12px;margin-bottom:18px}.setup-icon{width:35px;height:35px;display:grid;place-items:center;background:#f0ebff;border-radius:11px;color:#795ae9;font-size:19px}.setup-intro h3{margin:0;font-size:13px}.setup-intro p{margin:4px 0 0;font-size:10px;color:#9792a9}.setup-controls{display:grid;grid-template-columns:1fr 1fr 1.3fr auto;align-items:center;gap:14px}.select-field{display:grid;gap:7px}.select-field>span,.sidebar-label{font-size:9px;letter-spacing:1.1px;font-weight:800;color:#9691aa}.select-field select{width:100%;border:1px solid #e9e6f1;border-radius:9px;padding:11px 10px;color:#4e4967;background:#fcfbff;font-size:11px;outline-offset:1px}.toggle-field{display:flex;align-items:center;justify-content:space-between;gap:8px}.toggle-copy strong,.toggle-copy small{display:block}.toggle-copy strong{font-size:11px}.toggle-copy small{font-size:9px;color:#9893a9;margin-top:4px}.toggle{width:38px;height:22px;border:0;background:#dedbe9;border-radius:20px;padding:3px;flex-shrink:0}.toggle span{display:block;width:16px;height:16px;border-radius:50%;background:white;box-shadow:0 1px 3px #0002;transition:transform .2s}.toggle.enabled{background:#785be8}.toggle.enabled span{transform:translateX(16px)}.setup-start{white-space:nowrap;padding:13px 15px;gap:14px}.empty-note{color:#ba594f;font-size:11px;margin:12px 0 0}.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:23px 0 38px}.stat-item{display:flex;align-items:center;gap:12px;padding:17px 19px;border:1px solid #eeebf6;border-radius:13px;background:#ffffffa8}.stat-icon{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:17px}.violet-bg{background:#eee8ff;color:#7859e9}.green-bg{background:#e1f7ec;color:#29875f}.orange-bg{background:#fff0df;color:#d58d35}.stat-item strong,.stat-item small{display:block}.stat-item strong{font-family:Manrope,sans-serif;font-size:18px;letter-spacing:-.5px}.stat-item small{font-size:10px;color:#9691a7;margin-top:3px}.site-footer{min-height:67px;border-top:1px solid #eeebf6;padding:0 max(5.5vw,24px);display:flex;align-items:center;gap:18px;color:#9b97ad;font-size:10px}.footer-brand{font-family:Manrope,sans-serif;font-size:15px;font-weight:800;letter-spacing:-.5px;color:var(--ink);text-decoration:none}.footer-right{margin-left:auto;font-size:9px;letter-spacing:1.4px;font-weight:800;color:#aaa4c1}.quiz-view{padding-bottom:35px}.quiz-header{height:75px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.back-button{border:0;background:none;color:#88839e;font-size:12px;display:flex;gap:7px;align-items:center;padding:9px 0}.back-button:hover{color:var(--purple)}.quiz-brand{display:flex;align-items:center;gap:8px;font-family:Manrope,sans-serif;font-size:15px;font-weight:800}.small-mark{width:25px;height:25px;border-radius:8px;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(2,5px);gap:2px}.timer-chip{display:flex;align-items:center;gap:8px;border:1px solid #eae6f5;border-radius:10px;padding:9px 12px;color:#8c7bd0;background:#fff;font-size:13px}.timer-chip strong{font-size:12px;color:#51466e;font-variant-numeric:tabular-nums}.timer-chip.urgent{color:#d66b67;background:#fff5f4;border-color:#f5d9d8}.quiz-layout{display:grid;grid-template-columns:250px 1fr;gap:45px;padding:32px 0 0;max-width:990px;margin:auto}.quiz-sidebar{padding:22px;background:#fff;border:1px solid var(--line);border-radius:15px;align-self:start}.quiz-sidebar h2{font-family:Manrope,sans-serif;font-size:20px;letter-spacing:-.6px;margin:11px 0 8px}.quiz-sidebar>p{font-size:11px;line-height:1.7;color:#9994aa;margin:0 0 25px}.sidebar-stat{display:flex;align-items:center;justify-content:space-between;margin:16px 0;font-size:9px;letter-spacing:.7px;color:#9994aa}.sidebar-stat strong{font-size:12px;letter-spacing:0;color:#48435f}.sidebar-progress,.main-progress,.result-progress,.history-bar{height:5px;border-radius:5px;background:#f0edf7;overflow:hidden}.sidebar-progress span,.main-progress span,.result-progress span,.history-bar span{display:block;height:100%;background:linear-gradient(90deg,#7657e8,#b18bf3);border-radius:5px;transition:width .3s}.question-map{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:22px}.question-map button{aspect-ratio:1;border:1px solid #ebe8f4;border-radius:8px;background:#fff;color:#9a96ad;font-size:10px}.question-map button.current{background:#7657e8;border-color:#7657e8;color:white;box-shadow:0 4px 9px #7657e82e}.question-map button.done:not(.current){background:#e4f7ed;border-color:#c9eedb;color:#27835b}.sidebar-tip{display:flex;gap:9px;border-radius:10px;background:#f8f5ff;padding:12px;margin-top:23px;color:#886ee2}.sidebar-tip>span{font-size:15px}.sidebar-tip p{margin:0;font-size:9px;line-height:1.7;color:#9389b2}.sidebar-tip strong{color:#6752aa}.question-area{min-width:0;padding:17px 0 0}.question-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.question-number{font-size:10px;letter-spacing:1.1px;font-weight:800;color:#6e5bb6}.question-number i{font-style:normal;color:#b2adc4}.difficulty-pill{border-radius:20px;padding:6px 10px;font-size:9px;font-weight:700}.difficulty-easy{background:#e5f7ed;color:#32885f}.difficulty-medium{background:#fff4db;color:#b57b20}.difficulty-hard{background:#ffe8e8;color:#c85f63}.main-progress{height:4px}.question-content{padding:30px 0 25px}.question-kicker{font-size:11px;color:#a09ab4;margin-bottom:14px}.question-kicker span{margin:0 6px;color:#c1bad4}.question-content h1{font-family:Manrope,sans-serif;font-size:clamp(23px,3vw,32px);line-height:1.4;letter-spacing:-1.1px;margin:0;max-width:590px;color:#2b2743}.answer-hint{font-size:12px;color:#9893a9;margin:11px 0 23px}.answer-list{display:grid;gap:10px}.answer-option{width:100%;min-height:61px;border:1px solid #e9e6f2;background:#fff;border-radius:12px;display:flex;align-items:center;text-align:left;gap:13px;padding:11px 14px;color:#4d4964;transition:border-color .2s,background .2s}.answer-option:hover:not(:disabled){border-color:#b6a5f4;background:#fcfaff}.option-letter{width:32px;height:32px;display:grid;place-items:center;border:1px solid #e9e5f3;border-radius:9px;color:#8e88a5;font-size:11px;font-weight:700;flex-shrink:0}.option-text{font-size:12px;line-height:1.6;flex:1}.option-state{color:#b4afc4;font-size:14px}.answer-option.selected{border-color:#9479ed;background:#f6f2ff}.answer-option.selected .option-letter{background:#7657e8;color:white;border-color:#7657e8}.answer-option.correct{border-color:#9bd8b8;background:#f1fbf5}.answer-option.correct .option-letter{background:#299264;border-color:#299264;color:white}.answer-option.correct .option-state{color:#27865d}.answer-option.incorrect{border-color:#f0b4b4;background:#fff5f4}.answer-option.incorrect .option-letter{background:#d76c6c;color:white;border-color:#d76c6c}.answer-option.incorrect .option-state{color:#d76c6c}.explanation{display:flex;align-items:flex-start;gap:10px;margin-top:15px;padding:13px;border:1px solid #f1d8d4;background:#fff8f7;border-radius:11px}.explanation.right{border-color:#d6efe1;background:#f4fcf7}.explanation-icon{width:22px;height:22px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:#fbe1de;color:#c86a62;font-size:12px;font-weight:800}.explanation.right .explanation-icon{background:#d9f3e4;color:#268459}.explanation strong{font-size:11px;color:#51465c}.explanation p{font-size:11px;line-height:1.7;color:#8a839b;margin:4px 0 0}.question-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:19px;gap:12px}.text-button{border:0;background:none;color:#89839e;font-size:11px;padding:8px 0}.text-button:hover:not(:disabled){color:var(--purple)}.footer-progress{font-size:10px;color:#a09bb1}.next-button{padding:12px 15px;gap:12px;font-size:11px;border-radius:10px}.results-view{padding:24px 0 45px}.results-top{display:flex;align-items:center;justify-content:space-between}.result-card{max-width:780px;margin:26px auto 0;display:grid;grid-template-columns:.8fr 1.2fr;background:white;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 18px 55px #4c3b8a0a}.result-illustration{background:linear-gradient(150deg,#f1edff,#f8eaf6);position:relative;display:grid;place-items:center;min-height:390px;overflow:hidden}.result-illustration:before,.result-illustration:after{content:'';position:absolute;border:1px solid #d8caf8;border-radius:50%;width:260px;height:260px}.result-illustration:after{width:190px;height:190px;border-color:#e6d8f3}.result-ring{width:130px;height:130px;display:grid;place-items:center;border-radius:50%;background:linear-gradient(145deg,#fff,#e6dcff);box-shadow:0 18px 35px #8064d326;z-index:1}.result-ring span{font-size:65px;color:#8969ed}.confetti{position:absolute;color:#987ce9}.confetti-a{top:23%;left:19%;font-size:26px}.confetti-b{right:20%;top:27%;font-size:20px}.confetti-c{bottom:22%;left:24%;font-size:42px}.result-copy{padding:40px 38px}.result-copy h1{font-family:Manrope,sans-serif;font-size:31px;letter-spacing:-1.2px;margin:12px 0;color:var(--ink)}.result-copy>p{font-size:12px;line-height:1.8;color:#918ca2;margin:0}.result-score{display:flex;align-items:center;gap:16px;margin-top:24px}.result-score>strong{font-family:Manrope,sans-serif;font-size:46px;letter-spacing:-2px;color:#7557e8}.result-score>strong span{font-size:19px;color:#b0a9c4;letter-spacing:0}.result-score b,.result-score small{display:block}.result-score b{font-size:12px}.result-score small{font-size:10px;color:#9792a9;margin-top:5px}.result-progress{margin:13px 0 22px;height:6px}.result-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:17px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.result-metrics span,.result-metrics strong{display:block}.result-metrics span{font-size:8px;letter-spacing:.6px;color:#a09bb1;line-height:1.5}.result-metrics strong{font-size:11px;margin-top:7px;overflow-wrap:anywhere}.result-actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}.result-actions .primary-button{padding:12px 14px;gap:12px;font-size:11px}.secondary-button{border:1px solid #e7e2f2;background:white;color:#71698a;border-radius:10px;padding:12px 14px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:12px}.secondary-button:hover{border-color:#b6a5f4;background:#fbf9ff}.history-view{max-width:800px;margin:0 auto;padding:52px 0 45px}.history-heading .back-button{margin-bottom:30px}.history-heading h1{font-size:48px;margin:15px 0 12px}.history-heading>p{font-size:13px;color:#908ba3;line-height:1.8;max-width:490px;margin:0}.history-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:29px 0 35px}.history-summary>div{padding:18px;border:1px solid var(--line);border-radius:13px;background:white}.history-summary span,.history-summary strong{display:block}.history-summary span{font-size:9px;letter-spacing:.7px;color:#9c96b0}.history-summary strong{font-family:Manrope,sans-serif;font-size:26px;margin-top:9px}.history-list-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.history-list-heading h2{font-family:Manrope,sans-serif;font-size:17px;letter-spacing:-.5px}.history-list{display:grid;gap:10px}.history-item{display:grid;grid-template-columns:35px 1fr auto 90px;align-items:center;gap:13px;padding:15px;background:white;border:1px solid var(--line);border-radius:12px}.history-item-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:#f0eaff;color:#795be8}.history-item-main strong,.history-item-main small,.history-item-score strong,.history-item-score small{display:block}.history-item-main strong,.history-item-score strong{font-size:11px}.history-item-main small,.history-item-score small{font-size:9px;color:#9993aa;margin-top:5px}.history-item-score{text-align:right}.history-bar{height:5px}.empty-history{text-align:center;background:white;border:1px dashed #ded7f2;border-radius:16px;padding:45px 20px}.empty-history>span{font-size:33px;color:#8b6dea}.empty-history h3{font-family:Manrope,sans-serif;font-size:19px;margin:13px 0 7px}.empty-history p{font-size:12px;color:#9690a8;margin:0 0 18px}.history-back{margin-top:23px}.review-list{display:grid;gap:12px;margin-top:27px}.review-card{display:flex;gap:16px;padding:20px;background:white;border:1px solid var(--line);border-radius:14px}.review-index{width:35px;height:35px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:11px;font-weight:800}.review-correct{background:#e4f7ec;color:#2d895e}.review-wrong{background:#fff0ef;color:#c96968}.review-content{min-width:0}.review-topic{font-size:9px;color:#9789ce;letter-spacing:.6px;font-weight:700}.review-content h3{font-size:13px;line-height:1.7;margin:7px 0 12px}.review-content p{font-size:11px;line-height:1.7;margin:4px 0;color:#8e899f}.review-content .answer-good{color:#28865a}.review-content .answer-bad{color:#c96868}.review-content .correct-answer{color:#28865a}.review-content .review-explanation{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}.review-home{margin-top:20px}
+@media(min-width:1200px){.page-content{width:min(1120px,calc(100% - 80px))}}@media(max-width:850px){.topbar{gap:26px;padding:0 24px}.topbar-right{display:none}.hero{grid-template-columns:1fr .8fr;gap:10px;min-height:400px}.hero-art{transform:scale(.86);margin:0 -20px}.hero h1{font-size:48px}.category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.setup-controls{grid-template-columns:1fr 1fr}.toggle-field{padding:8px 0}.setup-start{justify-self:start}.quiz-layout{grid-template-columns:205px 1fr;gap:24px}.quiz-sidebar{padding:16px}.result-copy{padding:30px 24px}.result-illustration{min-height:350px}}@media(max-width:600px){.topbar{height:68px;padding:0 18px;gap:20px}.brand-name{font-size:20px}.top-nav{gap:13px;margin-left:auto}.nav-link{font-size:11px}.page-content{width:calc(100% - 36px)}.hero{grid-template-columns:1fr;padding:38px 0 30px;gap:0}.hero h1{font-size:45px;letter-spacing:-2.5px;margin-top:17px}.hero-description{font-size:13px}.hero-actions{gap:15px}.hero-art{height:300px;transform:scale(.84);margin:-4px 0 -10px}.section-heading{align-items:start;gap:10px}.section-heading h2{font-size:21px}.section-count{font-size:9px;text-align:right;max-width:95px;line-height:1.6}.category-grid{gap:9px}.category-card{min-height:148px;padding:13px}.category-icon{margin-bottom:10px}.category-card strong{font-size:12px}.category-card small{font-size:9px}.setup-panel{padding:18px 15px}.setup-controls{grid-template-columns:1fr 1fr;gap:14px 10px}.toggle-field{grid-column:1/-1}.setup-start{grid-column:1/-1;width:100%}.stats-row{gap:8px}.stat-item{padding:12px 8px;gap:8px;align-items:flex-start}.stat-icon{width:29px;height:29px;border-radius:9px;flex-shrink:0}.stat-item strong{font-size:16px}.stat-item small{font-size:9px;line-height:1.4}.site-footer{padding:15px 18px;gap:10px;flex-wrap:wrap;font-size:9px}.footer-right{display:none}.quiz-header{height:66px}.quiz-layout{display:flex;flex-direction:column;gap:18px;padding-top:18px}.quiz-sidebar{order:2;width:100%;padding:15px}.quiz-sidebar>p,.sidebar-tip{display:none}.quiz-sidebar h2{font-size:17px;margin:7px 0 13px}.sidebar-stat{margin:10px 0}.question-map{grid-template-columns:repeat(8,1fr);gap:6px;margin-top:15px}.question-map button{font-size:9px}.question-area{order:1;padding-top:3px}.question-content{padding:23px 0 20px}.question-content h1{font-size:25px;letter-spacing:-.7px}.answer-hint{font-size:11px}.answer-option{min-height:57px;padding:9px 10px;gap:10px}.option-text{font-size:11px}.question-footer{padding-top:14px}.footer-progress{display:none}.next-button{margin-left:auto}.result-card{grid-template-columns:1fr;margin-top:15px}.result-illustration{min-height:190px}.result-illustration:before{width:190px;height:190px}.result-illustration:after{width:140px;height:140px}.result-ring{width:95px;height:95px}.result-ring span{font-size:46px}.confetti-a{top:15%;left:24%}.confetti-b{right:22%;top:17%}.confetti-c{bottom:14%;left:26%}.result-copy{padding:25px 20px}.result-copy h1{font-size:26px}.result-score>strong{font-size:39px}.result-metrics{gap:6px}.result-metrics span{font-size:7px}.result-metrics strong{font-size:10px}.result-actions{display:grid;grid-template-columns:1fr}.history-view{padding:30px 0}.history-heading h1{font-size:40px;letter-spacing:-2px}.history-summary{gap:7px}.history-summary>div{padding:12px 9px}.history-summary span{font-size:8px;line-height:1.5}.history-summary strong{font-size:22px}.history-item{grid-template-columns:32px 1fr auto;gap:9px;padding:12px}.history-bar{display:none}.history-item-main strong,.history-item-score strong{font-size:10px}.history-item-main small,.history-item-score small{font-size:8px}.review-card{padding:14px;gap:10px}.review-content h3{font-size:12px}.top-nav .nav-link{font-size:10px}.quiz-brand{font-size:13px}.timer-chip{padding:8px}.back-button{font-size:11px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style>
